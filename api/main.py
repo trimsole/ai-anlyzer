@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 # Загружаем переменные окружения из .env файла
 load_dotenv()
 
-MODEL_NAME = "gemini-flash-latest"
+MODEL_NAME = "gemini-2.0-flash"
 SYSTEM_PROMPT = (
     "Ты опытный финансовый трейдер с 20-летним стажем технического анализа. "
     "Посмотри на этот график.\n"
