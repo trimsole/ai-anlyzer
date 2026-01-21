@@ -1,0 +1,16 @@
+# Python (Бэкенд)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.env
+
+# Node.js (Фронтенд)
+node_modules/
+dist/
+build/
+.DS_Store
+
+# Логи и прочее
+*.log
