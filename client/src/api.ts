@@ -1,14 +1,10 @@
 import type { AnalysisResponse } from "./types";
 
-// Автоматически определяем хост из текущего URL, чтобы работало и на localhost, и на IP
 function getApiUrl(): string {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return envUrl;
-  
-  // Если фронт открыт по IP, используем тот же IP для API
   const hostname = window.location.hostname;
-  const port = "8000";
-  return `http://${hostname}:${port}`;
+  return `https://ai-zfbn.onrender.com`; // Лучше явно укажите URL вашего бэкенда на Render
 }
 
 const API_URL = getApiUrl();
@@ -16,6 +12,17 @@ const API_URL = getApiUrl();
 export async function analyzeChart(file: File): Promise<AnalysisResponse> {
   const formData = new FormData();
   formData.append("file", file);
+  
+  // --- ДОБАВЛЕНО: Получаем ID и отправляем на бэкенд ---
+  // @ts-ignore
+  const tgUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
+  
+  if (!tgUserId) {
+      throw new Error("Запустите приложение через Telegram!");
+  }
+  
+  formData.append("tg_id", tgUserId.toString());
+  // -----------------------------------------------------
 
   const response = await fetch(`${API_URL}/analyze`, {
     method: "POST",
