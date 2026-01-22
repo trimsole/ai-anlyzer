@@ -1,10 +1,15 @@
 import type { AnalysisResponse } from "./types";
 
+// Автоматически определяем хост
 function getApiUrl(): string {
   const envUrl = import.meta.env.VITE_API_URL;
   if (envUrl) return envUrl;
-  const hostname = window.location.hostname;
-  return `https://ai-zfbn.onrender.com`; // Лучше явно укажите URL вашего бэкенда на Render
+  
+  // УДАЛЯЕМ ЛИШНЮЮ СТРОКУ:
+  // const hostname = window.location.hostname; 
+  
+  // Возвращаем ваш URL бэкенда на Render
+  return `https://ai-zfbn.onrender.com`;
 }
 
 const API_URL = getApiUrl();
@@ -12,8 +17,7 @@ const API_URL = getApiUrl();
 export async function analyzeChart(file: File): Promise<AnalysisResponse> {
   const formData = new FormData();
   formData.append("file", file);
-  
-  // --- ДОБАВЛЕНО: Получаем ID и отправляем на бэкенд ---
+
   // @ts-ignore
   const tgUserId = window.Telegram?.WebApp?.initDataUnsafe?.user?.id;
   
@@ -22,7 +26,6 @@ export async function analyzeChart(file: File): Promise<AnalysisResponse> {
   }
   
   formData.append("tg_id", tgUserId.toString());
-  // -----------------------------------------------------
 
   const response = await fetch(`${API_URL}/analyze`, {
     method: "POST",
