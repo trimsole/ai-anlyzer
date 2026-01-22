@@ -87,14 +87,14 @@ async def health():
 @app.post("/analyze", response_model=AnalysisResponse)
 async def analyze_chart(
     file: UploadFile = File(...),
-    tg_id: int = Form(...) # Получаем ID пользователя из формы
+    tg_id: int = Form(...)
 ) -> AnalysisResponse:
     
-    # 1. ПРОВЕРКА ЛИМИТОВ
     if not db:
         raise HTTPException(status_code=500, detail="Database not initialized")
     
-    limit_check = await db.check_limit(tg_id, limit=5) # 5 попыток в сутки
+    # 1. ПРОВЕРКА (без списания)
+    limit_check = await db.check_limit(tg_id, limit=5)
     
     if not limit_check['allowed']:
         error_msg = limit_check.get('error', 'Limit reached')
@@ -115,7 +115,7 @@ async def analyze_chart(
     if not api_key:
         raise HTTPException(status_code=500, detail="GEMINI_API_KEY не настроен")
 
-    # 3. ЗАПРОС К GEMINI
+    # 3. АНАЛИЗ (Если тут упадет ошибка, код остановится и списания не будет)
     model = get_model(api_key)
     contents = [
         {
@@ -143,15 +143,22 @@ async def analyze_chart(
             
         data = extract_json_payload(text)
         
-        # Добавляем информацию об остатке лимита в ответ
+        # 4. СПИСАНИЕ ПОПЫТКИ (Только если мы дошли сюда)
+        await db.increment_usage(tg_id)
+        
+        # Вычисляем новый остаток для отображения
+        new_remaining = limit_check['remaining'] - 1
+        
         return AnalysisResponse(
             **data,
-            remaining_limit=limit_check['remaining']
+            remaining_limit=new_remaining
         )
         
     except HTTPException:
         raise
     except ValueError as exc:
-        raise HTTPException(status_code=502, detail=f"Ответ модели нераспознан: {exc}") from exc
+        # Ошибки парсинга ответа AI
+        raise HTTPException(status_code=502, detail=f"AI не смог прочитать график: {exc}") from exc
     except Exception as exc:
-        raise HTTPException(status_code=502, detail=f"Ошибка обращения к модели: {exc}") from exc
+        # Любые другие ошибки (в т.ч. 429 от Google)
+        raise HTTPException(status_code=502, detail=f"Ошибка сервиса AI: {exc}") from exc
