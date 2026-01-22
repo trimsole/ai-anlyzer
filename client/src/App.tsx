@@ -2,13 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { analyzeChart } from "./api";
 import type { AnalysisResponse } from "./types";
 
+// Обновляем тип ответа, чтобы TS не ругался на remaining_limit
+interface ExtendedAnalysisResponse extends AnalysisResponse {
+  remaining_limit?: number;
+}
+
 declare global {
   interface Window {
     Telegram?: {
       WebApp?: {
         ready: () => void;
         expand: () => void;
+        initDataUnsafe?: {
+            user?: {
+                id: number;
+            }
+        };
         colorScheme?: string;
+        showAlert?: (message: string) => void; // Для нативных алертов
       };
     };
   }
@@ -32,7 +43,7 @@ function SignalBadge({ signal }: { signal: AnalysisResponse["signal"] }) {
 export default function App() {
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<string | null>(null);
-  const [result, setResult] = useState<AnalysisResponse | null>(null);
+  const [result, setResult] = useState<ExtendedAnalysisResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -71,10 +82,15 @@ export default function App() {
     setResult(null);
     try {
       const data = await analyzeChart(file);
-      setResult(data);
+      setResult(data as ExtendedAnalysisResponse);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Не удалось выполнить анализ";
       setError(message);
+      
+      // Если это ошибка лимита, можно показать нативный алерт Telegram
+      if (message.includes("Лимит") || message.includes("Пользователь не найден")) {
+          window.Telegram?.WebApp?.showAlert?.(message);
+      }
     } finally {
       setLoading(false);
     }
@@ -108,7 +124,7 @@ export default function App() {
               </div>
             </div>
             <p className="mt-2 text-sm text-slate-300">
-              Загрузи скрин графика и получи сигнал <span className="font-semibold text-emerald-200">LONG/SHORT</span> за секунды.
+              Загрузи скрин графика и получи сигнал <span className="font-semibold text-emerald-200">LONG/SHORT</span>.
             </p>
           </div>
 
@@ -156,7 +172,7 @@ export default function App() {
             </button>
 
             {error && (
-              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm text-red-100">
+              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm text-red-100 text-center">
                 {error}
               </div>
             )}
@@ -172,6 +188,14 @@ export default function App() {
                     </div>
                   </div>
                   <p className="mt-1 text-sm leading-relaxed text-slate-300">{result.reasoning}</p>
+                  
+                  {/* ОТОБРАЖЕНИЕ ОСТАТКА ЛИМИТОВ */}
+                  <div className="mt-3 pt-3 border-t border-white/10 text-center">
+                     <p className="text-xs text-slate-400">
+                        Осталось попыток на сегодня: <span className="text-emerald-400 font-bold">{result.remaining_limit}</span>
+                     </p>
+                  </div>
+
                 </div>
               </div>
             )}
@@ -182,10 +206,6 @@ export default function App() {
             >
               Попробовать снова
             </button>
-
-            <p className="pt-1 text-center text-[11px] text-slate-500">
-              Это не финансовая рекомендация. Используй риск‑менеджмент.
-            </p>
           </div>
         </div>
       </div>
