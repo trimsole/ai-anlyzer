@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { analyzeChart } from "./api";
 import type { AnalysisResponse } from "./types";
 
-// Обновляем тип ответа, чтобы TS не ругался на remaining_limit
+// Обновляем тип, чтобы TS не ругался
 interface ExtendedAnalysisResponse extends AnalysisResponse {
   remaining_limit?: number;
 }
@@ -19,7 +19,7 @@ declare global {
             }
         };
         colorScheme?: string;
-        showAlert?: (message: string) => void; // Для нативных алертов
+        showAlert?: (message: string) => void;
       };
     };
   }
@@ -38,6 +38,28 @@ function SignalBadge({ signal }: { signal: AnalysisResponse["signal"] }) {
       <div className="relative">{view.label}</div>
     </div>
   );
+}
+
+// --- НОВАЯ ФУНКЦИЯ: ПЕРЕВОДЧИК ОШИБОК ---
+function getFriendlyError(rawMsg: string): string {
+  // 1. Ошибка лимитов Google (429)
+  if (rawMsg.includes("429") || rawMsg.includes("Resource exhausted")) {
+    return "⏳ Сервер AI перегружен. Пожалуйста, подождите 1 минуту и попробуйте снова.";
+  }
+  // 2. Ошибка лимитов пользователя (из нашего бэкенда)
+  if (rawMsg.includes("Лимит") || rawMsg.includes("Limit")) {
+    return "⛔ Ваш дневной лимит исчерпан. Возвращайтесь завтра!";
+  }
+  // 3. Если пользователь не запустил бота
+  if (rawMsg.includes("Пользователь не найден") || rawMsg.includes("User not found")) {
+    return "👤 Ошибка авторизации. Перезапустите бота командой /start";
+  }
+  // 4. Если фото не загрузилось или битое
+  if (rawMsg.includes("image") || rawMsg.includes("файл")) {
+    return "📁 Не удалось обработать фото. Попробуйте загрузить другое.";
+  }
+  // 5. Любая другая техническая ошибка
+  return "❌ Не удалось провести анализ. Попробуйте еще раз через пару секунд.";
 }
 
 export default function App() {
@@ -84,12 +106,16 @@ export default function App() {
       const data = await analyzeChart(file);
       setResult(data as ExtendedAnalysisResponse);
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Не удалось выполнить анализ";
-      setError(message);
+      const rawMessage = err instanceof Error ? err.message : "Unknown error";
       
-      // Если это ошибка лимита, можно показать нативный алерт Telegram
-      if (message.includes("Лимит") || message.includes("Пользователь не найден")) {
-          window.Telegram?.WebApp?.showAlert?.(message);
+      // ИСПОЛЬЗУЕМ НАШ ПЕРЕВОДЧИК
+      const friendlyMessage = getFriendlyError(rawMessage);
+      
+      setError(friendlyMessage);
+      
+      // Если это лимит, можно дополнительно показать системное окно Телеграм
+      if (friendlyMessage.includes("лимит")) {
+          window.Telegram?.WebApp?.showAlert?.(friendlyMessage);
       }
     } finally {
       setLoading(false);
@@ -171,8 +197,9 @@ export default function App() {
               )}
             </button>
 
+            {/* ОТОБРАЖЕНИЕ ОШИБКИ */}
             {error && (
-              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm text-red-100 text-center">
+              <div className="rounded-2xl border border-red-500/60 bg-red-500/10 px-4 py-3 text-sm text-red-100 text-center animate-pulse">
                 {error}
               </div>
             )}
@@ -189,7 +216,7 @@ export default function App() {
                   </div>
                   <p className="mt-1 text-sm leading-relaxed text-slate-300">{result.reasoning}</p>
                   
-                  {/* ОТОБРАЖЕНИЕ ОСТАТКА ЛИМИТОВ */}
+                  {/* ОСТАТОК ЛИМИТОВ */}
                   <div className="mt-3 pt-3 border-t border-white/10 text-center">
                      <p className="text-xs text-slate-400">
                         Осталось попыток на сегодня: <span className="text-emerald-400 font-bold">{result.remaining_limit}</span>
@@ -206,6 +233,10 @@ export default function App() {
             >
               Попробовать снова
             </button>
+            
+            <p className="pt-1 text-center text-[11px] text-slate-500">
+              Это не финансовая рекомендация. Используй риск‑менеджмент.
+            </p>
           </div>
         </div>
       </div>
